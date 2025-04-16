@@ -1,191 +1,148 @@
-// winsntpclient.cpp : Defines the entry point for the application.
-//
-
 #include "stdafx.h"
 #include "resource.h"
+#include "winsock.h"
+#include "stdio.h"
+#include "time.h"
 
-#define MAX_LOADSTRING 100
+#define APP_NAME "WinSNTPClient"
+#define NTP_SERVER "ptbtime1.ptb.de"
+#define RECEIVE_TIMEOUT_MS 2000
+#define NTP_TIME_OFFSET 2208988800
 
-// Global Variables:
-HINSTANCE hInst;								// current instance
-TCHAR szTitle[MAX_LOADSTRING];								// The title bar text
-TCHAR szWindowClass[MAX_LOADSTRING];								// The title bar text
+typedef struct {
+	unsigned char flags;
+	unsigned char peerClockStratum;
+	unsigned char peerPollingInterval;
+	unsigned char peerClockPrecision;
+	unsigned int rootDelay;
+	unsigned int rootDispersion;
+	unsigned char referenceId[4];
+	unsigned int referenceTimestamp;
+	unsigned int referenceTimestampFractional;
+	unsigned int originTimestamp;
+	unsigned int originTimestampFractional;
+	unsigned int receiveTimestamp;
+	unsigned int receiveTimestampFractional;
+	unsigned int transmitTimestamp;
+	unsigned int transmitTimestampFractional;
+} NtpPacket;
 
-// Foward declarations of functions included in this code module:
-ATOM				MyRegisterClass(HINSTANCE hInstance);
-BOOL				InitInstance(HINSTANCE, int);
-LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
-LRESULT CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
+bool mapNtpTimeToSystemTime(unsigned int ntpTime, SYSTEMTIME* st) {
+	time_t ntpTimeTime = ntpTime - NTP_TIME_OFFSET;
 
-int APIENTRY WinMain(HINSTANCE hInstance,
-                     HINSTANCE hPrevInstance,
-                     LPSTR     lpCmdLine,
-                     int       nCmdShow)
-{
- 	// TODO: Place code here.
-	MSG msg;
-	HACCEL hAccelTable;
-
-	// Initialize global strings
-	LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-	LoadString(hInstance, IDC_WINSNTPCLIENT, szWindowClass, MAX_LOADSTRING);
-	MyRegisterClass(hInstance);
-
-	// Perform application initialization:
-	if (!InitInstance (hInstance, nCmdShow)) 
-	{
+	struct tm* utcTime = gmtime(&ntpTimeTime);
+	if (!utcTime) {
 		return FALSE;
 	}
 
-	hAccelTable = LoadAccelerators(hInstance, (LPCTSTR)IDC_WINSNTPCLIENT);
+	st->wYear = (unsigned short)(utcTime->tm_year + 1900);
+	st->wMonth = (unsigned short)(utcTime->tm_mon + 1);
+	st->wDay = (unsigned short)utcTime->tm_mday;
+	st->wHour = (unsigned short)utcTime->tm_hour;
+	st->wMinute = (unsigned short)utcTime->tm_min;
+	st->wSecond = (unsigned short)utcTime->tm_sec;
+	st->wMilliseconds = 0;
 
-	// Main message loop:
-	while (GetMessage(&msg, NULL, 0, 0)) 
-	{
-		if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg)) 
-		{
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
+	return TRUE;
+}
+
+int APIENTRY WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+	char message[512];
+
+	if (MessageBox(0, "Synchronize system clock now using SNTP?", APP_NAME, MB_YESNO | MB_ICONQUESTION) == IDNO) {
+		return TRUE;
 	}
 
-	return msg.wParam;
-}
+	WSADATA wsaData;
+	int startupResult = WSAStartup(0x101, &wsaData);
+	if (startupResult != 0) {
+		sprintf(message, "Unable to initialize WinSock: %i", startupResult);
+		MessageBox(0, message, APP_NAME, MB_OK | MB_ICONEXCLAMATION);
 
-
-
-//
-//  FUNCTION: MyRegisterClass()
-//
-//  PURPOSE: Registers the window class.
-//
-//  COMMENTS:
-//
-//    This function and its usage is only necessary if you want this code
-//    to be compatible with Win32 systems prior to the 'RegisterClassEx'
-//    function that was added to Windows 95. It is important to call this function
-//    so that the application will get 'well formed' small icons associated
-//    with it.
-//
-ATOM MyRegisterClass(HINSTANCE hInstance)
-{
-	WNDCLASSEX wcex;
-
-	wcex.cbSize = sizeof(WNDCLASSEX); 
-
-	wcex.style			= CS_HREDRAW | CS_VREDRAW;
-	wcex.lpfnWndProc	= (WNDPROC)WndProc;
-	wcex.cbClsExtra		= 0;
-	wcex.cbWndExtra		= 0;
-	wcex.hInstance		= hInstance;
-	wcex.hIcon			= LoadIcon(hInstance, (LPCTSTR)IDI_WINSNTPCLIENT);
-	wcex.hCursor		= LoadCursor(NULL, IDC_ARROW);
-	wcex.hbrBackground	= (HBRUSH)(COLOR_WINDOW+1);
-	wcex.lpszMenuName	= (LPCSTR)IDC_WINSNTPCLIENT;
-	wcex.lpszClassName	= szWindowClass;
-	wcex.hIconSm		= LoadIcon(wcex.hInstance, (LPCTSTR)IDI_SMALL);
-
-	return RegisterClassEx(&wcex);
-}
-
-//
-//   FUNCTION: InitInstance(HANDLE, int)
-//
-//   PURPOSE: Saves instance handle and creates main window
-//
-//   COMMENTS:
-//
-//        In this function, we save the instance handle in a global variable and
-//        create and display the main program window.
-//
-BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
-{
-   HWND hWnd;
-
-   hInst = hInstance; // Store instance handle in our global variable
-
-   hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
-      CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
-
-   if (!hWnd)
-   {
-      return FALSE;
-   }
-
-   ShowWindow(hWnd, nCmdShow);
-   UpdateWindow(hWnd);
-
-   return TRUE;
-}
-
-//
-//  FUNCTION: WndProc(HWND, unsigned, WORD, LONG)
-//
-//  PURPOSE:  Processes messages for the main window.
-//
-//  WM_COMMAND	- process the application menu
-//  WM_PAINT	- Paint the main window
-//  WM_DESTROY	- post a quit message and return
-//
-//
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-	int wmId, wmEvent;
-	PAINTSTRUCT ps;
-	HDC hdc;
-	TCHAR szHello[MAX_LOADSTRING];
-	LoadString(hInst, IDS_HELLO, szHello, MAX_LOADSTRING);
-
-	switch (message) 
-	{
-		case WM_COMMAND:
-			wmId    = LOWORD(wParam); 
-			wmEvent = HIWORD(wParam); 
-			// Parse the menu selections:
-			switch (wmId)
-			{
-				case IDM_ABOUT:
-				   DialogBox(hInst, (LPCTSTR)IDD_ABOUTBOX, hWnd, (DLGPROC)About);
-				   break;
-				case IDM_EXIT:
-				   DestroyWindow(hWnd);
-				   break;
-				default:
-				   return DefWindowProc(hWnd, message, wParam, lParam);
-			}
-			break;
-		case WM_PAINT:
-			hdc = BeginPaint(hWnd, &ps);
-			// TODO: Add any drawing code here...
-			RECT rt;
-			GetClientRect(hWnd, &rt);
-			DrawText(hdc, szHello, strlen(szHello), &rt, DT_CENTER);
-			EndPaint(hWnd, &ps);
-			break;
-		case WM_DESTROY:
-			PostQuitMessage(0);
-			break;
-		default:
-			return DefWindowProc(hWnd, message, wParam, lParam);
-   }
-   return 0;
-}
-
-// Mesage handler for about box.
-LRESULT CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
-{
-	switch (message)
-	{
-		case WM_INITDIALOG:
-				return TRUE;
-
-		case WM_COMMAND:
-			if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) 
-			{
-				EndDialog(hDlg, LOWORD(wParam));
-				return TRUE;
-			}
-			break;
+		return FALSE;
 	}
-    return FALSE;
+
+	struct hostent *h = gethostbyname(NTP_SERVER);
+	if (h == NULL) {
+		sprintf(message, "Unable to resolve hostname: %i", WSAGetLastError());
+		MessageBox(0, message, APP_NAME, MB_OK | MB_ICONEXCLAMATION);
+		WSACleanup();
+
+		return FALSE;
+	}
+
+	struct sockaddr_in a;
+	a.sin_family = AF_INET;
+	a.sin_port = htons(123);
+	a.sin_addr.s_addr = *(unsigned long*)h->h_addr;
+	
+	int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (s == INVALID_SOCKET) {
+		sprintf(message, "Unable to create socket: %i", WSAGetLastError());
+		MessageBox(0, message, APP_NAME, MB_OK | MB_ICONEXCLAMATION);
+		WSACleanup();
+
+		return FALSE;
+	}
+
+	DWORD timeout = RECEIVE_TIMEOUT_MS;
+	if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout)) == SOCKET_ERROR) {
+		sprintf(message, "Unable to set socket timeout: %i", WSAGetLastError());
+		MessageBox(0, message, APP_NAME, MB_OK | MB_ICONEXCLAMATION);
+		WSACleanup();
+
+		return FALSE;
+	}
+
+	NtpPacket packet; // used for sending and receiving
+	memset((void *)&packet, 0, sizeof(packet));
+	packet.flags = (4 << 3) | 3; // Version number: 4, Mode: 3 (Client)
+
+	if (sendto(s, (const char*)&packet, sizeof(packet), 0, (struct sockaddr*)&a, sizeof(a)) == SOCKET_ERROR) {
+		sprintf(message, "Unable to send NTP request packet: %i", WSAGetLastError());
+		MessageBox(0, message, APP_NAME, MB_OK | MB_ICONEXCLAMATION);
+		WSACleanup();
+
+		return FALSE;
+	}
+
+	if (recvfrom(s, (char *)&packet, sizeof(packet), 0, NULL, NULL) == SOCKET_ERROR) {
+		sprintf(message, "Unable to receive NTP response packet: %i", WSAGetLastError());
+		MessageBox(0, message, APP_NAME, MB_OK | MB_ICONEXCLAMATION);
+		WSACleanup();
+
+		return FALSE;
+	}
+
+
+	SYSTEMTIME st;
+	if(!mapNtpTimeToSystemTime(ntohl(packet.transmitTimestamp), &st)) {
+		MessageBox(0, "Unable to convert timestamp.", APP_NAME, MB_OK | MB_ICONEXCLAMATION);
+		WSACleanup();
+
+		return FALSE;
+	}
+
+	if (!SetSystemTime(&st)) {
+		MessageBox(0, "Unable to set system time.", APP_NAME, MB_OK | MB_ICONEXCLAMATION);
+		WSACleanup();
+
+		return FALSE;
+	}
+
+	sprintf(
+		message,
+		"System clock has been set to %04i-%02i-%02i %02i:%02i:%02i UTC.",
+		st.wYear,
+		st.wMonth,
+		st.wDay,
+		st.wHour,
+		st.wMinute,
+		st.wSecond
+	);
+	MessageBox(0, message, APP_NAME, MB_OK | MB_ICONINFORMATION);
+
+	WSACleanup();
+
+	return TRUE;
 }
