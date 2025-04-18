@@ -4,7 +4,7 @@ Minimalist Win32 program to synchronize the system clock with an NTP server usin
 
 ## Download
 
-[Release/winsntpclient.exe](Release/winsntpclient.exe)
+[Release/winsntpclient.exe](https://github.com/stefanschramm/winsntpclient/raw/refs/heads/main/Release/winsntpclient.exe)
 
 ## Usage
 
