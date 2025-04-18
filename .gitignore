@@ -1,6 +1,8 @@
-Debug
-Release
+/Debug
+/Release/*
 *.ncb
 *.plg
 *.opt
 *.aps
+
+!/Release/winsntpclient.exe
